@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use this module in your publication, please cite as below, and cite scLENS itself (see references)."
+type: software
+title: "sclens (omnibenchmark module)"
+abstract: |
+  scLENS wrapped as an Omnibenchmark RDIMR module for split-stages-plan.
+authors:
+  - family-names: "carrillo"
+    given-names: "ben"
+    email: "ben.uzh@proton.me"
+version: "0.1.0"
+license: MIT
+keywords:
+  - bioinformatics
+  - benchmark
+  - omnibenchmark
+  - module
+references:
+  - type: article
+    title: "scLENS: data-driven signal detection for unbiased scRNA-seq data analysis"
+    authors:
+      - family-names: "Kim"
+        given-names: "Hyun"
+      - family-names: "Chang"
+        given-names: "Won"
+      - family-names: "Chae"
+        given-names: "Seok Joo"
+      - family-names: "Park"
+        given-names: "Jong-Eun"
+      - family-names: "Seo"
+        given-names: "Minseok"
+      - family-names: "Kim"
+        given-names: "Jae Kyoung"
+    journal: "Nature Communications"
+    volume: 15
+    start: 3575
+    year: 2024
+    doi: "10.1038/s41467-024-47884-3"
+  - type: software
+    title: "scLENS"
+    repository-code: "https://github.com/Mathbiomed/scLENS"
+    commit: "e44017fad5cf55c539f87b6739bac28dbdc0f9c5"
+    license: MIT

@@ -1,0 +1,5 @@
+# OmniBenchmark Module Configuration
+
+entrypoints:
+  pca: sclens.sh
+  pca-prof: prof.sh sclens.sh   # denet samples RSS + per-PID VRAM into denet-samples.jsonl
