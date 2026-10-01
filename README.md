@@ -38,7 +38,9 @@ per-signal robustness scores, and is not a declared stage output.
 `pca-prof: prof.sh sclens.sh` runs the module under denet (pinned in the env,
 from almost-conductor) and writes `denet-samples.jsonl` with RSS and **per-PID
 VRAM**. denet ≥ 0.10 samples the GPU only when `--gpu` is passed, and
-`prof.sh` passes it.
+`prof.sh` passes it. denet 0.10.3 also discards the child's stdout and stderr, so
+`prof.sh` sends the module's output to `module.log` in the output directory and
+prints it to stdout once denet exits.
 
 ## Measured (RTX 2000 Ada laptop GPU, seed 42)
 
@@ -47,6 +49,7 @@ VRAM**. denet ≥ 0.10 samples the GPU only when `--gpu` is passed, and
 | duo-koh | 520 × 31364 | 34 → 34 | 2m47s | 5.1 GB | – |
 | duo-zhengmix4eq | 3994 × 9460 | 14 → 12 | 2m05s | 5.1 GB | – |
 | duo-zhengmix4eq, `--min_cells_per_gene 400` (cells > genes) | 3994 × 1087 | 15 → 12 | 1m42s | 3.5 GB | 246 MiB |
+| tenx-0010k | 9856 × 14632 | 74 → 57 | 9m27s | 11.6 GB | 2.1 GiB |
 
 Most of the wall time is Julia start-up and JIT compilation. scLENS builds a
 dense cells × genes matrix and runs a full eigendecomposition of the

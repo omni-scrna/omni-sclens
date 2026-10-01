@@ -58,12 +58,17 @@ case "$shebang" in
   *)        interp=$shebang ;;
 esac
 
-if [ -n "$interp" ]; then
-  exec denet --json --out "$out/denet-samples.jsonl" \
-       --interval "$DENET_INTERVAL_MS" --max-interval "$DENET_INTERVAL_MS" \
-       --gpu --quiet run -- $interp "$target" "$@"
-else
-  exec denet --json --out "$out/denet-samples.jsonl" \
-       --interval "$DENET_INTERVAL_MS" --max-interval "$DENET_INTERVAL_MS" \
-       --gpu --quiet run -- "./$target" "$@"
-fi
+[ -n "$interp" ] || interp="./$target" target=""
+
+# SIXTH, denet 0.10.3: `run` discards the child's stdout AND stderr (with or
+# without --quiet), so ob's log would hold nothing, error messages included.
+# The child redirects itself into module.log, which is replayed once denet
+# exits. denet passes the child's exit code through.
+set +e
+denet --json --out "$out/denet-samples.jsonl" \
+     --interval "$DENET_INTERVAL_MS" --max-interval "$DENET_INTERVAL_MS" \
+     --gpu --quiet run -- sh -c 'log=$1; shift; exec "$@" >"$log" 2>&1' \
+     sh "$out/module.log" $interp ${target:+"$target"} "$@"
+rc=$?
+cat "$out/module.log"
+exit $rc
