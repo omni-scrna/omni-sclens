@@ -1,61 +1,37 @@
 # sclens (omnibenchmark module)
 
 [scLENS](https://github.com/Mathbiomed/scLENS) (Kim et al. 2024, *Nat Commun*
-15:3575) as an omnibenchmark **RDIMR** module. It takes raw counts and does its
-own L1 → log1p → z-score normalization with L2 cell scaling. It then cuts
-eigenvalues at the Marchenko–Pastur/Tracy–Widom edge fitted against a shuffled
-null, and keeps the signals that survive a sparse perturbation test. Cells come
-from `filtered_cellids` and genes from `filtered_featureids`: every FILT gene,
-with no HVG selection.
+15:3575) as an **RDIMR** module. It takes raw counts on every FILT gene, does
+its own normalization, cuts eigenvalues at the RMT edge, and keeps the signals
+that survive a perturbation test.
 
     ./sclens.sh --output_dir out --name be1 --rawdata_h5ad be1.h5ad \
       --filtered_cellids be1_cellids.txt.gz --filtered_featureids be1_featureids.txt.gz \
       --random_seed 42
 
-The module writes `{name}_embedding.tsv`, `{name}_loadings.tsv` and
-`{name}_sclens.json`. The JSON holds `n_rmt`, `n_robust`, λ, the MP check and the
-per-signal robustness scores, and is not a declared stage output.
+Writes `{name}_embedding.tsv` and `{name}_loadings.tsv`, plus
+`{name}_sclens.json` with diagnostics (not a stage output).
 
-## Choices
+- **k is derived.** `--signals robust` (the default, as published) or
+  `--signals rmt` (everything above the edge, an ablation).
+- **No cell is dropped.** Only the gene filter runs (`--min_cells_per_gene 15`).
+- **GPU arm.** Upstream crashes on CPU when cells > genes, so `--device gpu`
+  refuses to start without CUDA. Declare `requires_capabilities: [gpu]`.
+- The same seed gives a byte-identical embedding.
 
-- **k is derived.** `--signals robust` (the default, as published) keeps the
-  signals that pass the robustness test. `--signals rmt` keeps everything above
-  the TW edge, as an ablation.
-- **QC.** Only scLENS's gene filter runs (`--min_cells_per_gene 15`, the
-  scLENS default). No cell is dropped, so every FILT cell reaches the
-  downstream joins.
-- **GPU arm.** Upstream `get_sigev` calls `cu()` with no fallback when
-  cells > genes. `--device gpu` (the default) refuses to start without a
-  functional CUDA. `--device cpu` is for smoke tests on cells < genes only.
-  The plan should declare `requires_capabilities: [gpu]`.
-- Non-integer input such as duo-koh's estimated counts is accepted. scLENS has
-  no count model, so only negative values are refused.
-- Seeded through `Random.seed!`. On the GPU, two runs with the same seed gave
-  byte-identical embeddings.
+`pca-prof: prof.sh sclens.sh` profiles under denet 0.10.3, pinned in the env,
+and writes `denet-samples.jsonl` with RSS and per-PID VRAM. `prof.sh` passes
+`--gpu`, which denet needs to sample VRAM. denet also discards the module's
+output, so `prof.sh` saves it to `module.log` and prints it after the run.
 
-## Profiling
+## Measured (RTX 2000 Ada laptop, seed 42)
 
-`pca-prof: prof.sh sclens.sh` runs the module under denet (pinned in the env,
-from almost-conductor) and writes `denet-samples.jsonl` with RSS and **per-PID
-VRAM**. denet ≥ 0.10 samples the GPU only when `--gpu` is passed, and
-`prof.sh` passes it. denet 0.10.3 also discards the child's stdout and stderr, so
-`prof.sh` sends the module's output to `module.log` in the output directory and
-prints it to stdout once denet exits.
-
-## Measured (RTX 2000 Ada laptop GPU, seed 42)
-
-| dataset | cells × genes | n_rmt → robust | wall | RSS | VRAM |
+| dataset | cells × genes | k (rmt → robust) | wall | RSS | VRAM |
 |---|---|---|---|---|---|
 | duo-koh | 520 × 31364 | 34 → 34 | 2m47s | 5.1 GB | – |
 | duo-zhengmix4eq | 3994 × 9460 | 14 → 12 | 2m05s | 5.1 GB | – |
-| duo-zhengmix4eq, `--min_cells_per_gene 400` (cells > genes) | 3994 × 1087 | 15 → 12 | 1m42s | 3.5 GB | 246 MiB |
 | tenx-0010k | 9856 × 14632 | 74 → 57 | 9m27s | 11.6 GB | 2.1 GiB |
 
-Most of the wall time is Julia start-up and JIT compilation. scLENS builds a
-dense cells × genes matrix and runs a full eigendecomposition of the
-min(cells, genes)² Wishart matrix about 25 times, so expect it to stop scaling
-well before pbmc size.
-
-`pixi run instantiate` resolves the Julia deps (scLENS pinned by commit in
-`Project.toml`, plus `Manifest.toml`). `pixi run export-env` regenerates
-`envs/sclens.yml`.
+The first run on a host spends about 6 min installing and precompiling the
+Julia packages. scLENS holds a dense cells × genes matrix, so pbmc scale is out
+of reach at 64GB.
