@@ -59,16 +59,23 @@ function read_counts(path, cells, genes)
     h5open(path, "r") do f
         g = f["layers/counts"]
         enc = read_attribute(g, "encoding-type")
-        enc == "csr_matrix" || error("$path: layers/counts is $enc, expected csr_matrix")
-        nc, ng = read_attribute(g, "shape")
-        # CSR cells x genes has the same buffers as CSC genes x cells.
-        X = permutedims(SparseMatrixCSC(ng, nc, read(g, "indptr") .+ 1,
-                                        read(g, "indices") .+ 1, Float32.(read(g, "data"))))
         obs, var = read(f, "obs/_index"), read(f, "var/_index")
         ci, gi = indexin(cells, obs), indexin(genes, var)
         any(isnothing, ci) && error("$(count(isnothing, ci)) filtered cell ids absent from $path")
         any(isnothing, gi) && error("$(count(isnothing, gi)) kept gene ids absent from $path")
-        X = X[ci, gi]
+        X = if enc == "array"
+            # Row-major cells x genes on disk; HDF5.jl reads it reversed as genes x cells.
+            sparse(Float32.(permutedims(read(g))[ci, gi]))
+        elseif enc in ("csr_matrix", "csc_matrix")
+            nc, ng = read_attribute(g, "shape")
+            ip, ix, v = read(g, "indptr") .+ 1, read(g, "indices") .+ 1, Float32.(read(g, "data"))
+            # CSR cells x genes has the same buffers as CSC genes x cells.
+            M = enc == "csc_matrix" ? SparseMatrixCSC(nc, ng, ip, ix, v) :
+                                      permutedims(SparseMatrixCSC(ng, nc, ip, ix, v))
+            M[ci, gi]
+        else
+            error("$path: layers/counts is $enc, expected array, csr_matrix or csc_matrix")
+        end
         # Non-integer is fine (duo-koh is estimated counts): scLENS is L1 -> log1p, no count model.
         all(>=(0), nonzeros(X)) || error("$path: negative values in layers/counts; scLENS needs raw counts")
         X
