@@ -54,6 +54,19 @@ read_ids(path) = GZip.open(path) do io
     [strip(l) for l in eachline(io) if !isempty(strip(l))]
 end
 
+"Dense anndata `array`: row-major cells x genes on disk, which HDF5.jl reads reversed as genes x cells."
+load_dense(g, ci, gi) = sparse(Float32.(permutedims(read(g))[ci, gi]))
+
+"Sparse anndata `csr_matrix` or `csc_matrix`, 0-based indices."
+function load_sparse(g, enc, ci, gi)
+    nc, ng = read_attribute(g, "shape")
+    ip, ix, v = read(g, "indptr") .+ 1, read(g, "indices") .+ 1, Float32.(read(g, "data"))
+    # CSR cells x genes has the same buffers as CSC genes x cells.
+    M = enc == "csc_matrix" ? SparseMatrixCSC(nc, ng, ip, ix, v) :
+                              permutedims(SparseMatrixCSC(ng, nc, ip, ix, v))
+    M[ci, gi]
+end
+
 "Raw counts, cells x genes, rows/cols in the order of `cells`/`genes`."
 function read_counts(path, cells, genes)
     h5open(path, "r") do f
@@ -63,19 +76,9 @@ function read_counts(path, cells, genes)
         ci, gi = indexin(cells, obs), indexin(genes, var)
         any(isnothing, ci) && error("$(count(isnothing, ci)) filtered cell ids absent from $path")
         any(isnothing, gi) && error("$(count(isnothing, gi)) kept gene ids absent from $path")
-        X = if enc == "array"
-            # Row-major cells x genes on disk; HDF5.jl reads it reversed as genes x cells.
-            sparse(Float32.(permutedims(read(g))[ci, gi]))
-        elseif enc in ("csr_matrix", "csc_matrix")
-            nc, ng = read_attribute(g, "shape")
-            ip, ix, v = read(g, "indptr") .+ 1, read(g, "indices") .+ 1, Float32.(read(g, "data"))
-            # CSR cells x genes has the same buffers as CSC genes x cells.
-            M = enc == "csc_matrix" ? SparseMatrixCSC(nc, ng, ip, ix, v) :
-                                      permutedims(SparseMatrixCSC(ng, nc, ip, ix, v))
-            M[ci, gi]
-        else
+        X = enc == "array" ? load_dense(g, ci, gi) :
+            enc in ("csr_matrix", "csc_matrix") ? load_sparse(g, enc, ci, gi) :
             error("$path: layers/counts is $enc, expected array, csr_matrix or csc_matrix")
-        end
         # Non-integer is fine (duo-koh is estimated counts): scLENS is L1 -> log1p, no count model.
         all(>=(0), nonzeros(X)) || error("$path: negative values in layers/counts; scLENS needs raw counts")
         X
